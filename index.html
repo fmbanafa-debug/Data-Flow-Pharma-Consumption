@@ -179,46 +179,75 @@
             });
         });
 
-        document.getElementById('fetch-data').addEventListener('click', () => {
+        document.getElementById('fetch-data').addEventListener('click', async () => {
             const country = document.getElementById('country').value;
             const pharmaceutical = document.getElementById('pharmaceutical').value;
             const marketType = document.getElementById('market_type').value;
             const year = document.getElementById('year').value;
 
-            // Show loading message and hide previous content
             document.getElementById('initial-message').classList.add('hidden');
             document.getElementById('data-display').classList.add('hidden');
             document.getElementById('error-message').classList.add('hidden');
             document.getElementById('loading').classList.remove('hidden');
 
-            // The URL provided is not a standard data endpoint but a dataflow definition.
-            // A real request would look something like this, but requires a functional API.
-            // const apiUrl = `https://sdmx.oecd.org/public/rest/data/OECD.ELS.HD/HEALTH_PHMC@DF_PHMC_CONSUM/1.0?startPeriod=${year}&endPeriod=${year}&REF_AREA=${country}&PHARMACEUTICAL=${pharmaceutical}&MARKET_TYPE=${marketType}`;
-            
-            // Simulating an API call with dummy data
-            setTimeout(() => {
-                document.getElementById('loading').classList.add('hidden');
-                
-                // For demonstration, let's pretend the API returned a value.
-                const dummyData = {
-                    country: document.getElementById('country').options[document.getElementById('country').selectedIndex].text,
-                    pharmaceutical: document.getElementById('pharmaceutical').options[document.getElementById('pharmaceutical').selectedIndex].text,
-                    market: document.getElementById('market_type').options[document.getElementById('market_type').selectedIndex].text,
-                    year: year,
-                    value: Math.random() * 1000 // Dummy value
-                };
+            // Real OECD API call
+            // API Docs: https://sdmx.oecd.org/public/rest/data.html
+            // Example Endpoint:
+            // https://sdmx.oecd.org/public/rest/data/OECD.ELS.HD/HEALTH_PHMC@DF_PHMC_CONSUM/1.0?startPeriod=2021&endPeriod=2021&REF_AREA=DEU&PHARMACEUTICAL=C10&MARKET=COMMUNITY
+            const apiUrl = `https://sdmx.oecd.org/public/rest/data/OECD.ELS.HD/HEALTH_PHMC@DF_PHMC_CONSUM/1.0?startPeriod=${year}&endPeriod=${year}&REF_AREA=${country}&PHARMACEUTICAL=${pharmaceutical}&MARKET=${marketType}`;
 
+            try {
+                const response = await fetch(apiUrl, {
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+                if (!response.ok) {
+                    throw new Error("OECD API did not respond successfully!");
+                }
+                const data = await response.json();
+                // SDMX JSON format parsing
+                // The path to the value may look like: data.dataSets[0].series
+                // The index keys depend on the dimension values (frequently there's only one series for a single query)
+                let value = null;
+                let observations = null;
+                
+                if (data && data.dataSets && data.dataSets.length > 0) {
+                    const seriesObj = data.dataSets[0].series;
+                    const seriesKeys = Object.keys(seriesObj);
+                    if (seriesKeys.length > 0) {
+                        const series = seriesObj[seriesKeys[0]];
+                        observations = series.observations;
+                        // observation keys are usually '0', '1', etc.
+                        const obsKey = Object.keys(observations)[0];
+                        if (obsKey !== undefined) {
+                            value = observations[obsKey][0];
+                        }
+                    }
+                }
+
+                document.getElementById('loading').classList.add('hidden');
                 const display = document.getElementById('data-display');
-                display.innerHTML = `
-                    <h3 class="text-xl font-semibold mb-2">Data for ${dummyData.country} (${dummyData.year})</h3>
-                    <p class="text-md"><strong>Pharmaceutical Category:</strong> ${dummyData.pharmaceutical}</p>
-                    <p class="text-md"><strong>Market Type:</strong> ${dummyData.market}</p>
-                    <p class="text-md mt-4 text-2xl font-bold text-indigo-600">
-                        Value: ${dummyData.value.toFixed(2)} Defined daily dose per 1000 inhabitants per day
-                    </p>
-                `;
+                
+                if (value !== null) {
+                    display.innerHTML = `
+                        <h3 class="text-xl font-semibold mb-2">Data for ${document.getElementById('country').options[document.getElementById('country').selectedIndex].text} (${year})</h3>
+                        <p class="text-md"><strong>Pharmaceutical Category:</strong> ${document.getElementById('pharmaceutical').options[document.getElementById('pharmaceutical').selectedIndex].text}</p>
+                        <p class="text-md"><strong>Market Type:</strong> ${document.getElementById('market_type').options[document.getElementById('market_type').selectedIndex].text}</p>
+                        <p class="text-md mt-4 text-2xl font-bold text-indigo-600">
+                            Value: ${value} Defined daily dose per 1000 inhabitants per day
+                        </p>
+                    `;
+                } else {
+                    display.innerHTML = `<span class="text-red-500">No data available for the selected criteria.</span>`;
+                }
                 display.classList.remove('hidden');
-            }, 1500);
+            } catch (error) {
+                document.getElementById('loading').classList.add('hidden');
+                const errorDiv = document.getElementById('error-message');
+                errorDiv.innerHTML = "Error retrieving data: " + error.message;
+                errorDiv.classList.remove('hidden');
+            }
         });
     </script>
 </body>
